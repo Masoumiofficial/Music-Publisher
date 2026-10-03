@@ -43,7 +43,7 @@ Designed for classic posts + typical Iranian music themes. Not tested against a 
 
 ## Support
 
-Author site: https://sajadmasoumi.com
+Author and design: تیم توسعه اتحاد وردپرس — https://etehadwp.com
 
 ## License
 

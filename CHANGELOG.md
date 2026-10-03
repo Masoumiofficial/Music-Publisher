@@ -25,6 +25,8 @@ Production baseline of the existing 1.0.0 prototype (same version: already label
 
 ### Changed
 
+- Plugin author and design credited to تیم توسعه اتحاد وردپرس (etehadwp.com)
+
 - Load text domain `sajad-music-publisher`
 - Persian `fa_IR` translations (`.l10n.php`)
 - RTL logical margins on admin wrap

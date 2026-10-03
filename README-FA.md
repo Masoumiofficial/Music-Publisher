@@ -32,4 +32,4 @@
 
 ## پشتیبانی
 
-https://sajadmasoumi.com
+نویسنده و طراح: تیم توسعه اتحاد وردپرس — https://etehadwp.com

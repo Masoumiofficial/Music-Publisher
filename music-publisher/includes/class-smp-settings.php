@@ -170,6 +170,16 @@ class SMP_Settings {
 					<?php submit_button( __( 'Save settings', 'sajad-music-publisher' ), 'primary', 'submit', false, array( 'class' => 'smp-btn smp-btn-primary' ) ); ?>
 				</div>
 			</form>
+
+			<div class="smp-card smp-about-card">
+				<div class="smp-card-title"><?php esc_html_e( 'About', 'sajad-music-publisher' ); ?></div>
+				<p class="smp-about-text">
+					<?php esc_html_e( 'Author and design:', 'sajad-music-publisher' ); ?>
+					<a href="https://etehadwp.com" target="_blank" rel="noopener noreferrer" class="smp-accent-link"><?php esc_html_e( 'Etehad WordPress development team', 'sajad-music-publisher' ); ?></a>
+					<br />
+					<a href="https://etehadwp.com" target="_blank" rel="noopener noreferrer">etehadwp.com</a>
+				</p>
+			</div>
 		</div>
 		<?php
 	}
