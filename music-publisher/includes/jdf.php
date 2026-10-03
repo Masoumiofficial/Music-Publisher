@@ -2,6 +2,9 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+if ( function_exists( 'jdate_win' ) ) {
+	return;
+}
 /* In the name of Allah = بسم اللّه الرّحمن الرّحیم */
 
 /**

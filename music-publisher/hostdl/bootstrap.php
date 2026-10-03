@@ -3,8 +3,9 @@
  * Shared helpers for download-host endpoints (NOT loaded by WordPress).
  * Copy this folder to the download server and set config.php.
  */
+// Never terminate WordPress if this file is scanned/included from the plugin.
 if ( defined( 'ABSPATH' ) ) {
-	exit;
+	return;
 }
 
 $config_file = __DIR__ . '/config.php';
