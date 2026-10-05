@@ -1,0 +1,110 @@
+@font-face{font-family:'estedad';src:url(../fonts/Estedad.woff2);font-display:swap}
+* {
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+}
+body {background: #e5e5e5;font: 15px estedad,tahoma;;direction: rtl;}
+a {text-decoration:none;color:#000000}
+input, textarea {
+    color: #333;
+    margin: 5px;
+    padding: 8px 13px;
+    width: 48%;
+    border: 1px solid #d4d4d4;
+    transition: all 0.3s ease-out;
+    font: 13px estedad,tahoma;
+    display: inline-block;
+	border-radius: 4px;
+	box-shadow: 0px 0px 20px -11px rgb(113, 109, 107);
+}
+#button {
+
+    cursor: pointer;
+    color: #FFF;
+    font: 15px estedad,tahoma;
+    border: 0;
+    float: none;
+    border-radius: 5px;
+    background-image: linear-gradient(to right, #36D1DC 0%, #5B86E5 51%, #36D1DC 100%);
+    position: relative;
+    box-shadow: 0px 14px 33px -15px rgb(253, 183, 143);
+    transition: 0.5s;
+    background-size: 200% auto;
+
+}
+
+#button:hover {
+    background-position: right center;
+}
+label{cursor: pointer;}
+.textarea{width: 99%; resize: vertical; direction: ltr; font: 12px tahoma;height: 150px;}
+.textarea2{width: 99%; resize: none; text-align:center; font: 17px estedad,tahoma;height: 50px;}
+
+.entry {
+    background: #fff;
+    display: inline;
+    box-shadow: 0 0 11px RGBA(67, 68, 90, 0.31);
+    width: 90%;
+    border-radius: 10px;
+}
+.cadr {
+    width: 100%;
+    padding: 1em 2em 1em;
+    overflow: hidden;
+    text-align: center;
+}
+
+.title {
+    background: #f3f3f3;
+    width: 100%;
+    float: right;
+    padding: 2em;
+    margin: 2em 0px;
+    text-align: center;
+    border-radius: 20px;
+}
+
+.matn {
+    background: #f2f2f2;
+    padding: 1em;
+	margin-top:1em;
+}
+ input:focus, textarea:focus { outline: none; }
+ * { margin: 0; padding: 0; box-sizing: border-box; }
+ *{outline:0;box-sizing:border-box;border:0;padding:0;margin:0}
+ 
+
+input[type="radio"]
+{
+    position: absolute;
+    right: 0;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+@keyframes moveup
+{
+    0%{ bottom: -25px; opacity: 0;}
+    100%{ bottom: 0; opacity: 1;}
+}
+
+@keyframes movedown
+{
+    0%{ top: -25px; opacity: 0;}
+    100%{ top: 0; opacity: 1;}
+}
+
+inputs form table input {
+    border: 1px solid #d8d7d5;
+    width: 100%;
+    padding: 10px 8px;
+    box-shadow: none;
+    transition: .3s;
+    font-size: 11px;
+}
+input[type=checkbox]{border:1px solid #3962d8}
+form table input:focus{border:1px solid #a0cfec;box-shadow:0 0 2px #0088dd2b;outline:none}
