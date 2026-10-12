@@ -9,6 +9,7 @@
 # استفاده:
 #   ./publish-release.sh                 # انتشار همین نسخه (v1.0.0)
 #   ./publish-release.sh 1.0.1           # انتشار یک نسخه مشخص
+#   ./publish-release.sh --target main   # برچسب روی commit دیگری (پیش‌فرض: HEAD)
 #   ./publish-release.sh --draft         # انتشار به‌صورت پیش‌نویس
 #   ./publish-release.sh --dry-run       # فقط بررسی و ساخت بسته‌ها، بدون هیچ انتشار
 #
@@ -24,10 +25,11 @@ readonly DIST_DIR="dist"
 DRAFT=0
 DRY_RUN=0
 VERSION_OVERRIDE=""
+TAG_TARGET=""
 ALLOW_DIRTY=0
 
 usage() {
-    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -41,6 +43,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --draft)        DRAFT=1 ;;
         --dry-run)      DRY_RUN=1 ;;
+        --target)       [[ $# -ge 2 ]] || die "بعد از --target یک ref لازم است."
+                        TAG_TARGET="$2"; shift ;;
         --allow-dirty)  ALLOW_DIRTY=1 ;;
         -h|--help)      usage 0 ;;
         -*)             die "گزینه ناشناخته: $1 (برای راهنما: --help)" ;;
@@ -127,14 +131,18 @@ gh repo view >/dev/null 2>&1 || die "دسترسی به مخزن گیت‌هاب 
 REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 
 # --- ۶. ساخت و push برچسب --------------------------------------------
+TARGET_REF="${TAG_TARGET:-HEAD}"
+TARGET_SHA="$(git rev-parse --verify "${TARGET_REF}^{commit}")" \
+    || die "ref «$TARGET_REF» پیدا نشد."
+
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
     TAG_SHA="$(git rev-list -n1 "$TAG")"
-    [[ "$TAG_SHA" == "$(git rev-parse HEAD)" ]] \
-        || die "برچسب $TAG روی commit دیگری است ($TAG_SHA)."
-    log "برچسب $TAG از قبل وجود دارد و به HEAD اشاره می‌کند."
+    [[ "$TAG_SHA" == "$TARGET_SHA" ]] \
+        || die "برچسب $TAG روی commit دیگری است ($TAG_SHA ≠ $TARGET_SHA)."
+    log "برچسب $TAG از قبل وجود دارد و به $TARGET_SHA اشاره می‌کند."
 else
-    git tag -a "$TAG" -m "TaranehYar ${VERSION}" HEAD
-    ok "برچسب $TAG ساخته شد."
+    git tag -a "$TAG" -m "TaranehYar ${VERSION}" "$TARGET_SHA"
+    ok "برچسب $TAG روی $TARGET_REF ($TARGET_SHA) ساخته شد."
 fi
 
 if [[ -z "$(git ls-remote --tags origin "refs/tags/$TAG")" ]]; then
