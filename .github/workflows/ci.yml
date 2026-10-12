@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: دریافت کد
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: نصب PHP
         uses: shivammathur/setup-php@v2
@@ -49,7 +49,7 @@ jobs:
         php: ['7.4', '8.1', '8.3']
     steps:
       - name: دریافت کد
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: نصب PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: دریافت کد
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: ساخت بسته‌ها با build.sh
         run: ./build.sh
@@ -81,7 +81,7 @@ jobs:
           sha256sum dist/*.zip
 
       - name: بارگذاری بسته‌ها به‌عنوان Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: taranehyar-packages
           path: dist/*.zip

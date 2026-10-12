@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: دریافت کد (همراه با همه برچسب‌ها)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -114,7 +114,7 @@ jobs:
 
       - name: بارگذاری بسته‌ها به‌عنوان Artifact
         if: always() && hashFiles('dist/*.zip') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: release-packages-${{ github.run_number }}
           path: dist/*.zip
