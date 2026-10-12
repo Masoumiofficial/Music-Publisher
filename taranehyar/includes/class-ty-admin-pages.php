@@ -74,6 +74,31 @@ class TaranehYar_Admin_Pages {
         }
     }
 
+    /** کارت وضعیت انتقال‌های اخیر به هاست دانلود */
+    private function queue_card() {
+        $log = TaranehYar_Queue::get_log( 8 );
+        echo '<div class="ty-card"><div class="ty-card-title">📡 وضعیت انتقال‌ها به هاست دانلود</div>';
+        if ( empty( $log ) ) {
+            echo '<p class="ty-hint">هنوز انتقالی ثبت نشده است.</p>';
+        } else {
+            echo '<div class="ty-queue-list">';
+            foreach ( $log as $e ) {
+                $status = isset( $e['status'] ) ? $e['status'] : '';
+                $label  = TaranehYar_Queue::status_label( $status );
+                $time   = isset( $e['time'] ) ? wp_date( 'H:i', $e['time'] ) : '';
+                echo '<div class="ty-queue-item">';
+                echo '<span class="ty-queue-pill ty-queue-' . esc_attr( $status ) . '">' . esc_html( $label ) . '</span>';
+                echo '<span class="ty-queue-type">' . esc_html( isset( $e['type'] ) ? $e['type'] : '' ) . '</span>';
+                echo '<span class="ty-queue-title">' . esc_html( isset( $e['title'] ) ? $e['title'] : '' ) . '</span>';
+                echo '<span class="ty-queue-msg">' . esc_html( isset( $e['message'] ) ? $e['message'] : '' ) . '</span>';
+                echo '<span class="ty-queue-time">' . esc_html( $time ) . '</span>';
+                echo '</div>';
+            }
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+
     private function card_open( $title ) {
         echo '<div class="ty-card"><div class="ty-card-title">' . $title . '</div>';
     }
@@ -206,6 +231,7 @@ class TaranehYar_Admin_Pages {
         $this->header('🎵','پنل ارسال تک آهنگ','ارسال آهنگ جدید به سایت با تمام جزئیات');
         $this->nav_tabs('ty-dashboard');
         $this->notice();
+        $this->queue_card();
         $this->form_open('ty_submit_music');
         $this->music_form_body();
         $this->submit_btn('ارسال تک آهنگ');

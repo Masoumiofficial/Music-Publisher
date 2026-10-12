@@ -23,12 +23,17 @@ define( 'TY_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'TY_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 require_once TY_PLUGIN_DIR . 'includes/class-ty-settings.php';
+require_once TY_PLUGIN_DIR . 'includes/class-ty-http.php';
+require_once TY_PLUGIN_DIR . 'includes/class-ty-queue.php';
 require_once TY_PLUGIN_DIR . 'includes/class-ty-admin-pages.php';
 require_once TY_PLUGIN_DIR . 'includes/class-ty-post-handler.php';
 
 function ty_init() {
     $settings = new TaranehYar_Settings();
     $settings->init();
+
+    $queue = new TaranehYar_Queue();
+    $queue->init();
 
     $admin = new TaranehYar_Admin_Pages();
     $admin->init();

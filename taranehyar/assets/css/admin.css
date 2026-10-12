@@ -519,3 +519,37 @@
     .ty-track-row input[type=url]:last-child { display: none; }
     .ty-header { flex-wrap: wrap; }
 }
+
+/* ── وضعیت انتقال‌ها (صف پس‌زمینه) ─────────────────────────── */
+.ty-queue-list { display: grid; gap: 8px; }
+.ty-queue-item {
+    display: grid;
+    grid-template-columns: 90px 80px 1fr 1.2fr 48px;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 12px;
+}
+.ty-queue-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 11px;
+    text-align: center;
+}
+.ty-queue-queued     { background: rgba(108, 99, 255, 0.15); color: #9d97ff; }
+.ty-queue-processing { background: rgba(255, 190, 60, 0.15); color: #ffbe3c; }
+.ty-queue-success    { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+.ty-queue-error      { background: rgba(255, 90, 90, 0.15);  color: #ff6b6b; }
+.ty-queue-type  { color: var(--text-dim); font-weight: 600; }
+.ty-queue-title { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ty-queue-msg   { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ty-queue-time  { color: var(--text-dim); text-align: left; direction: ltr; }
+@media (max-width: 782px) {
+    .ty-queue-item { grid-template-columns: 90px 1fr; }
+    .ty-queue-msg, .ty-queue-time { display: none; }
+}

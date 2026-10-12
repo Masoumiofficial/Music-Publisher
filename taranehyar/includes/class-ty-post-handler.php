@@ -73,34 +73,10 @@ class TaranehYar_Post_Handler {
     }
 
     /**
-     * بررسی اینکه آدرس وارد شده یک URL واقعی با http/https هست
-     * و به آدرس داخلی شبکه (SSRF) اشاره نمی‌کنه — شامل بررسی IPهای resolve شده.
+     * بررسی آدرس ورودی (ضد SSRF) — ارجاع به TaranehYar_Http.
      */
     private function validate_remote_url( $url ) {
-        if ( empty( $url ) ) return true;
-        $parts = wp_parse_url( $url );
-        if ( empty( $parts['scheme'] ) || ! in_array( $parts['scheme'], array( 'http', 'https' ), true ) ) {
-            return new WP_Error( 'invalid_url', 'آدرس وارد شده معتبر نیست.' );
-        }
-        $host = $parts['host'] ?? '';
-        if ( in_array( $host, array( 'localhost', '127.0.0.1', '0.0.0.0', '::1' ), true ) ) {
-            return new WP_Error( 'ssrf_blocked', 'آدرس‌های داخلی مجاز نیستند.' );
-        }
-        if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
-            if ( ! filter_var( $host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-                return new WP_Error( 'ssrf_blocked', 'آدرس IP داخلی مجاز نیست.' );
-            }
-        } else {
-            $ips = gethostbynamel( $host );
-            if ( is_array( $ips ) ) {
-                foreach ( $ips as $ip ) {
-                    if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-                        return new WP_Error( 'ssrf_blocked', 'این دامنه به یک آدرس داخلی اشاره می‌کند و مجاز نیست.' );
-                    }
-                }
-            }
-        }
-        return true;
+        return TaranehYar_Http::validate_remote_url( $url );
     }
 
     /**
@@ -184,33 +160,30 @@ class TaranehYar_Post_Handler {
     }
 
     /**
-     * ارسال داده به هاست دانلود، فقط به آدرسی که در تنظیمات وارد شده (ضد SSRF).
-     * توکن امنیتی به‌صورت خودکار به داده‌ها اضافه می‌شود.
-     * بازگشت: true در موفقیت، WP_Error در خطا.
+     * آماده‌سازی منبع فایل برای ارسال به هاست دانلود.
+     * - آپلود مستقیم: ذخیره موقت + URL عمومی (پس از انتقال، حذف می‌شود)
+     * - لینک: ارسال همان لینک به هاست دانلود (بدون دانلود روی سایت اصلی)
+     *
+     * بازگشت: array( $send_url, true|WP_Error|null )
      */
-    private function send_to_dlhost( $endpoint_key, $data ) {
-        $url = $this->cfg( $endpoint_key );
-        if ( empty( $url ) ) {
-            return new WP_Error( 'no_endpoint', 'آدرس هاست دانلود در تنظیمات وارد نشده است.' );
+    private function prepare_source( $file_key, $url_val, $local_base, array $allowed_exts, $uploads_dir, $uploads_url, array &$cleanup ) {
+        if ( ! empty( $_FILES[ $file_key ]['tmp_name'] ) ) {
+            $valid = $this->validate_uploaded_file( $file_key, $allowed_exts );
+            if ( is_wp_error( $valid ) ) return array( '', $valid );
+            $ext  = strtolower( pathinfo( $_FILES[ $file_key ]['name'], PATHINFO_EXTENSION ) );
+            $dest = $uploads_dir . '/' . $local_base . '.' . $ext;
+            if ( ! move_uploaded_file( $_FILES[ $file_key ]['tmp_name'], $dest ) ) {
+                return array( '', new WP_Error( 'move_failed', 'انتقال فایل آپلودی ناموفق بود.' ) );
+            }
+            $cleanup[] = $dest;
+            return array( $uploads_url . '/' . $local_base . '.' . $ext, true );
         }
-        $valid = $this->validate_remote_url( $url );
-        if ( is_wp_error( $valid ) ) return $valid;
-
-        $data['token'] = $this->cfg( 'apitoken' );
-
-        $response = wp_remote_post( $url, array(
-            'body'      => $data,
-            'timeout'   => 300,
-            'sslverify' => true,
-        ) );
-
-        if ( is_wp_error( $response ) ) return $response;
-
-        $code = wp_remote_retrieve_response_code( $response );
-        if ( $code < 200 || $code >= 300 ) {
-            return new WP_Error( 'http_error', "هاست دانلود خطا برگرداند (HTTP {$code})." );
+        if ( ! empty( $url_val ) ) {
+            $valid = $this->validate_remote_url( $url_val );
+            if ( is_wp_error( $valid ) ) return array( '', $valid );
+            return array( $url_val, true );
         }
-        return true;
+        return array( '', null );
     }
 
     private function jdate_dir() {
@@ -270,7 +243,7 @@ class TaranehYar_Post_Handler {
        تک آهنگ / ریمیکس / نوحه  (منطق مشترک)
     ═══════════════════════════════════════════════ */
 
-    private function handle_music_type( $nonce_action, $redirect_page, $curl_key, $cat_key, $cat_default, $musics_type ) {
+    private function handle_music_type( $nonce_action, $redirect_page, $curl_key, $cat_key, $cat_default, $musics_type, $type_label ) {
         $this->verify( $nonce_action );
         set_time_limit( 600 );
 
@@ -388,42 +361,46 @@ class TaranehYar_Post_Handler {
         update_post_meta( $post_id, 'pplayer_in',     'off' );
         update_post_meta( $post_id, 'select_effect',  'imghvr-shutter-in-out-diag-1' );
 
-        $warnings = array();
+        $warnings    = array();
+        $cleanup     = array();
+        $uploads_url = trailingslashit( $this->upload_base()['url'] ) . "{$year}/{$months}";
 
-        $temp320 = $uploads_dir . "/temp-{$post_id}-320.mp3";
-        $temp128 = $uploads_dir . "/temp-{$post_id}-128.mp3";
-
-        $r = $this->upload_or_download( 'filelink320', $link320, $temp320, self::ALLOWED_AUDIO );
+        list( $send320, $r ) = $this->prepare_source( 'filelink320', $link320, "temp-{$post_id}-320", self::ALLOWED_AUDIO, $uploads_dir, $uploads_url, $cleanup );
         $this->collect_warning( $warnings, $r, 'فایل ۳۲۰' );
-        if ( $r === true ) update_post_meta( $post_id, 'music320', $filename320 );
+        if ( $send320 !== '' ) update_post_meta( $post_id, 'music320', $filename320 );
 
-        $r = $this->upload_or_download( 'filelink128', $link128, $temp128, self::ALLOWED_AUDIO );
+        list( $send128, $r ) = $this->prepare_source( 'filelink128', $link128, "temp-{$post_id}-128", self::ALLOWED_AUDIO, $uploads_dir, $uploads_url, $cleanup );
         $this->collect_warning( $warnings, $r, 'فایل ۱۲۸' );
-        if ( $r === true ) update_post_meta( $post_id, 'music128', $filename128 );
+        if ( $send128 !== '' ) update_post_meta( $post_id, 'music128', $filename128 );
 
         $r = $this->upload_or_download( 'filecover', $cover, $img_path, self::ALLOWED_IMAGE );
         $this->collect_warning( $warnings, $r, 'کاور' );
+        $send_cover = '';
         if ( $r === true ) {
             $this->resize_image( $img_path, 470, 470 );
             $this->attach_image_to_post( $img_path, $post_id );
+            $send_cover = $img_url;
         }
 
-        $r = $this->send_to_dlhost( $curl_key, array(
-            'file_name' => $trackname,
-            'artist_en' => $enname,
-            'song_en'   => $entrack,
-            'link320'   => $link320,
-            'link128'   => $link128,
-            'cover'     => $cover,
-            'cover_mp3' => $cover_mp3,
-            'tag_site'  => $this->cfg( 'namesite2', $this->cfg( 'urlsite' ) ),
+        // انتقال فایل‌ها به هاست دانلود در صف پس‌زمینه (بدون timeout شدن درخواست ادمین)
+        TaranehYar_Queue::add( array(
+            'type'         => $type_label,
+            'title'        => $title,
+            'endpoint_key' => $curl_key,
+            'data'         => array(
+                'file_name' => $trackname,
+                'artist_en' => $enname,
+                'song_en'   => $entrack,
+                'link320'   => $send320,
+                'link128'   => $send128,
+                'cover'     => $send_cover,
+                'cover_mp3' => $cover_mp3,
+                'tag_site'  => $this->cfg( 'namesite2', $this->cfg( 'urlsite' ) ),
+            ),
+            'cleanup'      => $cleanup,
         ) );
-        $this->collect_warning( $warnings, $r, 'ارسال به هاست دانلود' );
 
-        @unlink( $temp320 );
-        @unlink( $temp128 );
-
-        $final_msg = $req_msg;
+        $final_msg = $req_msg . ' ⏳ انتقال فایل‌ها به هاست دانلود در صف پس‌زمینه قرار گرفت (وضعیت از کارت «وضعیت انتقال‌ها» قابل پیگیری است).';
         $has_err   = false;
         if ( ! empty( $warnings ) ) {
             $final_msg .= ' ⚠ هشدار: ' . implode( ' | ', $warnings );
@@ -434,15 +411,15 @@ class TaranehYar_Post_Handler {
     }
 
     public function handle_music() {
-        $this->handle_music_type( 'ty_submit_music', 'ty-dashboard', 'urlfunction_music', 'cat_music', '10,12', 'musicss' );
+        $this->handle_music_type( 'ty_submit_music', 'ty-dashboard', 'urlfunction_music', 'cat_music', '10,12', 'musicss', 'تک آهنگ' );
     }
 
     public function handle_remix() {
-        $this->handle_music_type( 'ty_submit_remix', 'ty-remix', 'urlfunction_remix', 'cat_remix', '10,13', 'musicss_remix' );
+        $this->handle_music_type( 'ty_submit_remix', 'ty-remix', 'urlfunction_remix', 'cat_remix', '10,13', 'musicss_remix', 'ریمیکس' );
     }
 
     public function handle_nohe() {
-        $this->handle_music_type( 'ty_submit_nohe', 'ty-nohe', 'urlfunction_nohe', 'cat_nohe', '10,14', 'musicss_nohe' );
+        $this->handle_music_type( 'ty_submit_nohe', 'ty-nohe', 'urlfunction_nohe', 'cat_nohe', '10,14', 'musicss_nohe', 'نوحه' );
     }
 
     /* ═══════════════════════════════════════════════
@@ -538,25 +515,31 @@ class TaranehYar_Post_Handler {
 
         $r = $this->upload_or_download( 'filecover', $cover, $img_path, self::ALLOWED_IMAGE );
         $this->collect_warning( $warnings, $r, 'کاور' );
+        $send_cover = '';
         if ( $r === true ) {
             $this->resize_image( $img_path, 470, 470 );
             $this->attach_image_to_post( $img_path, $post_id );
+            $send_cover = $img_url;
         }
 
-        $r = $this->send_to_dlhost( 'urlfunction_video', array(
-            'file_name' => $trackname,
-            'artist_en' => $enname,
-            'song_en'   => $entrack,
-            'link1080'  => $link1080,
-            'link720'   => $link720,
-            'link480'   => $link480,
-            'link320'   => $link320,
-            'cover'     => $cover,
-            'tag_site'  => $this->cfg( 'namesite2', $this->cfg( 'urlsite' ) ),
+        TaranehYar_Queue::add( array(
+            'type'         => 'موزیک ویدیو',
+            'title'        => $title,
+            'endpoint_key' => 'urlfunction_video',
+            'data'         => array(
+                'file_name' => $trackname,
+                'artist_en' => $enname,
+                'song_en'   => $entrack,
+                'link1080'  => $link1080,
+                'link720'   => $link720,
+                'link480'   => $link480,
+                'link320'   => $link320,
+                'cover'     => $send_cover,
+                'tag_site'  => $this->cfg( 'namesite2', $this->cfg( 'urlsite' ) ),
+            ),
         ) );
-        $this->collect_warning( $warnings, $r, 'ارسال به هاست دانلود' );
 
-        $final_msg = $req_msg;
+        $final_msg = $req_msg . ' ⏳ انتقال فایل‌ها به هاست دانلود در صف پس‌زمینه قرار گرفت (وضعیت از کارت «وضعیت انتقال‌ها» قابل پیگیری است).';
         $has_err   = false;
         if ( ! empty( $warnings ) ) {
             $final_msg .= ' ⚠ هشدار: ' . implode( ' | ', $warnings );
@@ -691,15 +674,17 @@ class TaranehYar_Post_Handler {
 
         $r = $this->upload_or_download( 'filecover', $cover, $img_path, self::ALLOWED_IMAGE );
         $this->collect_warning( $warnings, $r, 'کاور' );
+        $send_cover = '';
         if ( $r === true ) {
             $this->attach_image_to_post( $img_path, $post_id );
+            $send_cover = $img_url;
         }
 
         $curl_data = array(
             'album_name' => $album_name,
             'artist_en'  => $artist_en,
             'song_en'    => $song_en,
-            'cover'      => $cover,
+            'cover'      => $send_cover,
             'cover_mp3'  => $cover_mp3,
             'tag_site'   => $this->cfg( 'namesite2', $this->cfg( 'urlsite' ) ),
         );
@@ -710,10 +695,15 @@ class TaranehYar_Post_Handler {
             $curl_data["track_link320_{$i}"] = esc_url_raw( $_POST["track_link320_{$i}"] ?? '' );
             $curl_data["track_link128_{$i}"] = esc_url_raw( $_POST["track_link128_{$i}"] ?? '' );
         }
-        $r = $this->send_to_dlhost( 'urlfunction_album', $curl_data );
-        $this->collect_warning( $warnings, $r, 'ارسال به هاست دانلود' );
 
-        $final_msg = $req_msg;
+        TaranehYar_Queue::add( array(
+            'type'         => 'آلبوم',
+            'title'        => $title,
+            'endpoint_key' => 'urlfunction_album',
+            'data'         => $curl_data,
+        ) );
+
+        $final_msg = $req_msg . ' ⏳ انتقال فایل‌ها به هاست دانلود در صف پس‌زمینه قرار گرفت (وضعیت از کارت «وضعیت انتقال‌ها» قابل پیگیری است).';
         $has_err   = false;
         if ( ! empty( $warnings ) ) {
             $final_msg .= ' ⚠ هشدار: ' . implode( ' | ', $warnings );
@@ -747,51 +737,44 @@ class TaranehYar_Post_Handler {
             }
         }
 
-        $urlsite = $this->cfg( 'urlsite' );
         $year = date( 'Y' ); $months = date( 'm' );
         $uploads_dir = $this->ensure_upload_dir( $year, $months );
+        $uploads_url = trailingslashit( $this->upload_base()['url'] ) . "{$year}/{$months}";
         $filenames = $this->safe_filename( "{$enname} - {$entrack}" );
 
         $uid      = uniqid();
-        $temp_jpg = $uploads_dir . "/leech-{$uid}.jpg";
-        $temp_mp3 = $uploads_dir . "/leech-{$uid}.mp3";
-        $temp_mp4 = $uploads_dir . "/leech-{$uid}.mp4";
-
         $warnings = array();
+        $cleanup  = array();
 
-        $r1 = $this->upload_or_download( 'filecover', $cover, $temp_jpg, self::ALLOWED_IMAGE );
+        list( $cover_send, $r1 ) = $this->prepare_source( 'filecover', $cover, "leech-{$uid}", self::ALLOWED_IMAGE, $uploads_dir, $uploads_url, $cleanup );
         $this->collect_warning( $warnings, $r1, 'کاور' );
 
-        $r2 = $this->upload_or_download( 'filemp3', $linkfilemp3, $temp_mp3, self::ALLOWED_AUDIO );
+        list( $mp3_send, $r2 ) = $this->prepare_source( 'filemp3', $linkfilemp3, "leech-{$uid}-mp3", self::ALLOWED_AUDIO, $uploads_dir, $uploads_url, $cleanup );
         $this->collect_warning( $warnings, $r2, 'فایل MP3' );
 
-        $r3 = $this->upload_or_download( 'filemp4', $linkfilemp4, $temp_mp4, self::ALLOWED_VIDEO );
+        list( $mp4_send, $r3 ) = $this->prepare_source( 'filemp4', $linkfilemp4, "leech-{$uid}-mp4", self::ALLOWED_VIDEO, $uploads_dir, $uploads_url, $cleanup );
         $this->collect_warning( $warnings, $r3, 'فایل MP4' );
 
-        $uploads_url = trailingslashit( $this->upload_base()['url'] ) . "{$year}/{$months}/";
-        $cover_url = ( $r1 === true ) ? "{$uploads_url}leech-{$uid}.jpg" : '';
-        $link_mp3  = ( $r2 === true ) ? "{$uploads_url}leech-{$uid}.mp3" : '';
-        $link_mp4  = ( $r3 === true ) ? "{$uploads_url}leech-{$uid}.mp4" : '';
-
-        $r = $this->send_to_dlhost( 'urlfunction_leech', array(
-            'file_name'   => $filenames,
-            'artist_en'   => $enname,
-            'song_en'     => $entrack,
-            'linkfilemp3' => $link_mp3,
-            'linkfilemp4' => $link_mp4,
-            'cover'       => $cover_url,
-            'tag_site'    => $this->cfg( 'namesite2', $this->cfg( 'urlsite' ) ),
+        TaranehYar_Queue::add( array(
+            'type'         => 'لیچ فایل',
+            'title'        => $filenames,
+            'endpoint_key' => 'urlfunction_leech',
+            'data'         => array(
+                'file_name'   => $filenames,
+                'artist_en'   => $enname,
+                'song_en'     => $entrack,
+                'linkfilemp3' => $mp3_send,
+                'linkfilemp4' => $mp4_send,
+                'cover'       => $cover_send,
+                'tag_site'    => $this->cfg( 'namesite2', $this->cfg( 'urlsite' ) ),
+            ),
+            'cleanup'      => $cleanup,
         ) );
-        $this->collect_warning( $warnings, $r, 'ارسال به هاست دانلود' );
 
-        @unlink( $temp_mp3 );
-        @unlink( $temp_mp4 );
-        @unlink( $temp_jpg );
-
-        $final_msg = 'لیچ فایل با موفقیت انجام شد.';
+        $final_msg = 'درخواست لیچ ثبت شد و در صف پس‌زمینه قرار گرفت (وضعیت از کارت «وضعیت انتقال‌ها» قابل پیگیری است).';
         $has_err   = false;
         if ( ! empty( $warnings ) ) {
-            $final_msg = '⚠ مشکلاتی پیش آمد: ' . implode( ' | ', $warnings );
+            $final_msg .= ' ⚠ مشکلاتی پیش آمد: ' . implode( ' | ', $warnings );
             $has_err = true;
         }
 
