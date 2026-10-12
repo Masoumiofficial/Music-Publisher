@@ -27,6 +27,7 @@ DRY_RUN=0
 VERSION_OVERRIDE=""
 TAG_TARGET=""
 ALLOW_DIRTY=0
+MISSING_ASSETS=0
 
 usage() {
     sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
@@ -109,17 +110,22 @@ trap 'rm -f "$NOTES_FILE"' EXIT
     echo "- \`taranehyar-hostdl.zip\` — فقط اسکریپت‌های هاست دانلود (در ریشه هاست دانلود آپلود شود)"
     echo
     echo "راهنمای نصب فارسی: [\`docs/INSTALL-fa.md\`](https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/blob/main/docs/INSTALL-fa.md)"
+} > "$NOTES_FILE"
+
+# بخش SHA-256 فقط وقتی به ریلیز اضافه می‌شود که فایل‌ها واقعاً پیوست شده باشند
+hashes_section() {
     echo
     echo "## بررسی سلامت فایل‌ها (SHA-256)"
     echo
     echo '```'
     ( cd "$DIST_DIR" && sha256sum taranehyar.zip taranehyar-hostdl.zip )
     echo '```'
-} > "$NOTES_FILE"
+}
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
     ok "اجرای آزمایشی — بسته‌ها آماده‌اند و یادداشت‌ها ساخته شدند، اما چیزی منتشر نشد."
     echo "--- یادداشت‌های انتشار ---"
+    { cat "$NOTES_FILE"; hashes_section; } > "$NOTES_FILE"
     cat "$NOTES_FILE"
     exit 0
 fi
@@ -159,13 +165,28 @@ RELEASE_ARGS=(--title "ترانه‌یار نسخه ${VERSION}" --notes-file "$N
 
 if gh release view "$TAG" >/dev/null 2>&1; then
     log "ریلیز $TAG از قبل وجود دارد؛ به‌روزرسانی می‌شود ..."
-    gh release upload "$TAG" "${ASSETS[@]}" --clobber
     gh release edit "$TAG" "${RELEASE_ARGS[@]}"
     ok "ریلیز به‌روزرسانی شد."
 else
     log "انتشار ریلیز $TAG روی $REPO ..."
-    gh release create "$TAG" "${ASSETS[@]}" --verify-tag "${RELEASE_ARGS[@]}"
+    gh release create "$TAG" --verify-tag "${RELEASE_ARGS[@]}"
     ok "ریلیز منتشر شد."
+fi
+
+# --- ۸. پیوست فایل‌های بسته (در صورت مسدود نبودن شبکه) -----------------
+log "پیوست بسته‌ها به ریلیز ..."
+if gh release upload "$TAG" "${ASSETS[@]}" --clobber; then
+    ok "فایل‌های بسته پیوست شدند."
+    { cat "$NOTES_FILE"; hashes_section; } > "${NOTES_FILE}.tmp"
+    mv "${NOTES_FILE}.tmp" "$NOTES_FILE"
+    RELEASE_ARGS=(--title "ترانه‌یار نسخه ${VERSION}" --notes-file "$NOTES_FILE")
+    [[ "$DRAFT" -eq 1 ]] && RELEASE_ARGS+=(--draft)
+    gh release edit "$TAG" "${RELEASE_ARGS[@]}"
+else
+    warn "آپلود فایل‌ها ناموفق بود (دسترسی به uploads.github.com برقرار نشد)."
+    warn "ریلیز منتشر شد، اما دو فایل زیر ضمیمه نشده‌اند. برای پیوست دستی:"
+    warn "  gh release upload $TAG ${ASSETS[*]}"
+    MISSING_ASSETS=1
 fi
 
 RELEASE_KIND="published"
