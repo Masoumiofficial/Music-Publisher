@@ -1,0 +1,89 @@
+name: CI
+
+# بررسی خودکار کد در هر push/PR + اجرای دستی از تب Actions
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: بررسی نحو PHP
+    runs-on: ubuntu-latest
+    steps:
+      - name: دریافت کد
+        uses: actions/checkout@v4
+
+      - name: نصب PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: اجرای php -l روی همه فایل‌های PHP
+        run: |
+          set -euo pipefail
+          php -v | head -1
+          count=0
+          while IFS= read -r -d '' file; do
+            php -l "$file" >/dev/null
+            count=$((count + 1))
+          done < <(find taranehyar tests -name '*.php' -print0)
+          echo "✅ $count فایل PHP بدون خطای نحوی"
+
+  test:
+    name: تست‌های هاست دانلود (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # پایین‌ترین نسخه پشتیبانی‌شده (7.2) + نسخه‌های رایج امروز
+        php: ['7.4', '8.1', '8.3']
+    steps:
+      - name: دریافت کد
+        uses: actions/checkout@v4
+
+      - name: نصب PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: اجرای تست‌های عملکردی
+        run: php tests/test-hostdl.php
+
+  build:
+    name: ساخت بسته‌های انتشار
+    runs-on: ubuntu-latest
+    steps:
+      - name: دریافت کد
+        uses: actions/checkout@v4
+
+      - name: ساخت بسته‌ها با build.sh
+        run: ./build.sh
+
+      - name: بررسی محتوای بسته‌ها
+        run: |
+          set -euo pipefail
+          unzip -l dist/taranehyar.zip | grep -q 'taranehyar/taranehyar\.php'
+          unzip -l dist/taranehyar.zip | grep -q 'hostdl/bootstrap.php'
+          unzip -l dist/taranehyar.zip | grep -q 'hostdl/getid3/getid3.php'
+          unzip -l dist/taranehyar-hostdl.zip | grep -q 'hostdl/curl-music.php'
+          ls -lh dist
+          sha256sum dist/*.zip
+
+      - name: بارگذاری بسته‌ها به‌عنوان Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: taranehyar-packages
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
