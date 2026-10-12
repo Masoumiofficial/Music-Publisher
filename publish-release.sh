@@ -161,7 +161,12 @@ fi
 
 # --- ۷. انتشار (یا به‌روزرسانی) Release --------------------------------
 RELEASE_ARGS=(--title "ترانه‌یار نسخه ${VERSION}" --notes-file "$NOTES_FILE")
-[[ "$DRAFT" -eq 1 ]] && RELEASE_ARGS+=(--draft)
+if [[ "$DRAFT" -eq 1 ]]; then
+    RELEASE_ARGS+=(--draft)
+else
+    # صریحاً --draft=false می‌دهیم تا اگر ریلیزِ همین برچسب پیش‌نویس مانده بود، منتشر شود
+    RELEASE_ARGS+=(--draft=false)
+fi
 
 if gh release view "$TAG" >/dev/null 2>&1; then
     log "ریلیز $TAG از قبل وجود دارد؛ به‌روزرسانی می‌شود ..."
@@ -179,8 +184,6 @@ if gh release upload "$TAG" "${ASSETS[@]}" --clobber; then
     ok "فایل‌های بسته پیوست شدند."
     { cat "$NOTES_FILE"; hashes_section; } > "${NOTES_FILE}.tmp"
     mv "${NOTES_FILE}.tmp" "$NOTES_FILE"
-    RELEASE_ARGS=(--title "ترانه‌یار نسخه ${VERSION}" --notes-file "$NOTES_FILE")
-    [[ "$DRAFT" -eq 1 ]] && RELEASE_ARGS+=(--draft)
     gh release edit "$TAG" "${RELEASE_ARGS[@]}"
 else
     warn "آپلود فایل‌ها ناموفق بود (دسترسی به uploads.github.com برقرار نشد)."
