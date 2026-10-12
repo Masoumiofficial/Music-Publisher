@@ -1,0 +1,122 @@
+name: Release
+
+# انتشار نسخه «ترانه‌یار»
+#  • با push برچسب (مثل v1.0.1) خودکار منتشر می‌شود.
+#  • اجرای دستی از تب Actions با انتخاب حالت dry-run یا publish.
+# تمام منطق انتشار در publish-release.sh است (بدون تکرار منطق در workflow).
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'حالت اجرا: dry-run فقط ساخت و بررسی بسته‌ها / publish انتشار واقعی'
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - publish
+      version:
+        description: 'نسخه هدف (خالی = نسخه هدر افزونه)'
+        required: false
+        type: string
+      target:
+        description: 'ref برچسب، مثل v1.0.0 برای به‌روزرسانی ریلیز موجود (خالی = HEAD)'
+        required: false
+        type: string
+      draft:
+        description: 'انتشار به‌صورت پیش‌نویس'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: ساخت و انتشار نسخه
+    runs-on: ubuntu-latest
+    steps:
+      - name: دریافت کد (همراه با همه برچسب‌ها)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: نصب PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: اجرای تست‌ها قبل از انتشار
+        run: php tests/test-hostdl.php
+
+      - name: تنظیم هویت git برای ساخت برچسب
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: ساخت بسته‌ها و انتشار
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_DRAFT: ${{ inputs.draft }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            [[ -n "${INPUT_VERSION}" ]] && ARGS+=("${INPUT_VERSION}")
+            [[ -n "${INPUT_TARGET}"  ]] && ARGS+=(--target "${INPUT_TARGET}")
+            [[ "${INPUT_DRAFT}" == "true" ]] && ARGS+=(--draft)
+            [[ "${INPUT_MODE}"  == "dry-run" ]] && ARGS+=(--dry-run)
+          fi
+
+          echo "▸ ./publish-release.sh ${ARGS[*]:-<بدون آرگومان>}"
+          if [[ ${#ARGS[@]} -gt 0 ]]; then
+            ./publish-release.sh "${ARGS[@]}"
+          else
+            ./publish-release.sh
+          fi
+
+      - name: خلاصه اجرا
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "## ترانه‌یار — نتیجه انتشار"
+            echo
+            echo "- حالت: \`${{ inputs.mode || 'tag-push' }}\` / رویداد: \`${GITHUB_EVENT_NAME}\`"
+            echo "- نسخه هدر افزونه: \`$(grep -m1 -E '^[[:space:]]*\*[[:space:]]*Version:' taranehyar/taranehyar.php | awk '{print $3}')\`"
+            echo
+            if compgen -G "dist/*.zip" >/dev/null; then
+              echo "### بسته‌های ساخته‌شده"
+              echo
+              echo '```'
+              ( cd dist && sha256sum ./*.zip )
+              echo '```'
+            fi
+            echo "### آخرین ریلیزها"
+            echo
+            gh release list --limit 3 || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: بارگذاری بسته‌ها به‌عنوان Artifact
+        if: always() && hashFiles('dist/*.zip') != ''
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-packages-${{ github.run_number }}
+          path: dist/*.zip
+          if-no-files-found: warn
+          retention-days: 30

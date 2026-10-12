@@ -20,8 +20,35 @@ taranehyar/            سورس افزونه وردپرس (نصب‌شونده)
 ├── readme.txt         صفحه محصول (وردپرس)
 └── uninstall.php
 build.sh               ساخت بسته‌های انتشار در dist/
+publish-release.sh     انتشار ریلیز گیت‌هاب
+.github/workflows/     وورکفلوهای GitHub Actions (CI + Release)
 ANALYSIS.md            گزارش تحلیل و آماده‌سازی برای فروش
 ```
+
+## وورکفلوها (GitHub Actions)
+
+| وورکفلو | فایل | اجرا با | کار |
+|---|---|---|---|
+| **CI** | `.github/workflows/ci.yml` | push روی `main`، هر PR، اجرای دستی | بررسی نحو همه فایل‌های PHP (`php -l`)، اجرای `tests/test-hostdl.php` روی PHP 7.4/8.1/8.3، ساخت بسته‌ها با `build.sh` و بارگذاری آن‌ها به‌عنوان Artifact |
+| **Release** | `.github/workflows/release.yml` | push برچسب `v*`، اجرای دستی | اجرای تست‌ها، سپس `./publish-release.sh` برای ساخت بسته‌ها، ساخت/به‌روزرسانی برچسب و انتشار GitHub Release با فایل‌های zip |
+
+اجرای دستی وورکفلو Release (از تب **Actions ← Release ← Run workflow** یا با `gh`):
+
+```bash
+# فقط بررسی و ساخت بسته‌ها، بدون انتشار (پیشنهاد می‌شود اول این را بزنید)
+gh workflow run release.yml -f mode=dry-run
+
+# انتشار واقعی همین نسخه (نسخه از هدر افزونه خوانده می‌شود)
+gh workflow run release.yml -f mode=publish
+
+# به‌روزرسانی ریلیز موجود (مثلاً پیوست دوباره فایل‌ها به v1.0.0)
+gh workflow run release.yml -f mode=publish -f target=v1.0.0
+
+# انتشار پیش‌نویس
+gh workflow run release.yml -f mode=publish -f draft=true
+```
+
+> برای انتشار نسخه جدید: هدر `Version:` افزونه، `Stable tag:` در `readme.txt` و بخش `## <نسخه>` در `CHANGELOG.md` را یکسان کنید، سپس `git tag -a v1.0.1 -m "TaranehYar 1.0.1" && git push origin v1.0.1`.
 
 ## ساخت بسته انتشار
 
