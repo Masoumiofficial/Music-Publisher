@@ -89,6 +89,40 @@ jobs:
             ./publish-release.sh
           fi
 
+      - name: صحت‌سنجی ریلیز (منتشرشده + هر دو فایل پیوست)
+        # فقط وقتی واقعاً منتشر کرده‌ایم معنا دارد (نه در حالت dry-run و نه در انتشار پیش‌نویس)
+        if: ${{ (github.event_name == 'push' || inputs.mode == 'publish') && inputs.draft != true }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            VERSION="$(grep -m1 -E '^[[:space:]]*\*[[:space:]]*Version:' taranehyar/taranehyar.php | awk '{print $3}')"
+            TAG="${INPUT_TARGET:-v${VERSION}}"
+          fi
+
+          python3 - "$TAG" <<'PY'
+          import json, subprocess, sys
+          tag = sys.argv[1]
+          data = json.loads(subprocess.check_output(
+              ["gh", "release", "view", tag, "--json", "isDraft,isPrerelease,url,assets"]))
+          names = sorted(a["name"] for a in data["assets"] if a["state"] == "uploaded")
+          expected = ["taranehyar-hostdl.zip", "taranehyar.zip"]
+          problems = []
+          if data["isDraft"]:
+              problems.append("ریلیز همچنان پیش‌نویس (draft) است")
+          if names != expected:
+              problems.append(f"فایل‌های پیوست ناقص است: {names} (انتظار: {expected})")
+          print(f"▸ {tag} → {data['url']}\n▸ پیوست‌ها: {names}")
+          if problems:
+              print("\n".join("✖ " + p for p in problems), file=sys.stderr)
+              sys.exit(1)
+          print("✔ ریلیز منتشر شده و هر دو فایل zip پیوست شده‌اند.")
+          PY
+
       - name: خلاصه اجرا
         if: always()
         env:
